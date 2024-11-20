@@ -21,7 +21,7 @@ TARGET_RMS = 0.1
 def generate(
     generation_text: str,
     duration: Optional[float] = None,
-    model_name: str = "lucasnewman/f5-tts-mlx",
+    model_name: str = "alandao/f5-tts-mlx-8bit",
     ref_audio_path: Optional[str] = None,
     ref_audio_text: Optional[str] = None,
     steps: int = 32,
