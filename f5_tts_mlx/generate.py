@@ -97,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default="lucasnewman/f5-tts-mlx",
+        default="alandao/f5-tts-mlx-8bit",
         help="Name of the model to use",
     )
     parser.add_argument(
