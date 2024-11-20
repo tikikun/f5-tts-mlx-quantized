@@ -21,7 +21,7 @@ TARGET_RMS = 0.1
 def generate(
     generation_text: str,
     duration: Optional[float] = None,
-    model_name: str = "alandao/f5-tts-mlx-8bit",
+    model_name: str = "alandao/f5-tts-mlx-4bit",
     ref_audio_path: Optional[str] = None,
     ref_audio_text: Optional[str] = None,
     steps: int = 32,
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default="alandao/f5-tts-mlx-8bit",
+        default="alandao/f5-tts-mlx-4bit",
         help="Name of the model to use",
     )
     parser.add_argument(
