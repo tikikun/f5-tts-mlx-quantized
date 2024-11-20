@@ -383,7 +383,7 @@ class F5TTS(nn.Module):
                 print("Loading model with 8bit quantization")
                 bit = 8
             elif "4bit" in hf_model_name_or_path:
-                print("Loading model with 8bit quantization")
+                print("Loading model with 4bit quantization")
                 bit = 4
 
         path = fetch_from_hub(hf_model_name_or_path)
