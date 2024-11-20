@@ -377,7 +377,15 @@ class F5TTS(nn.Module):
         return out, trajectory
 
     @classmethod
-    def from_pretrained(cls, hf_model_name_or_path: str) -> F5TTS:
+    def from_pretrained(cls, hf_model_name_or_path: str, bit = None) -> F5TTS:
+        if bit is None:
+            if "8bit" in hf_model_name_or_path:
+                print("Loading model with 8bit quantization")
+                bit = 8
+            elif "4bit" in hf_model_name_or_path:
+                print("Loading model with 8bit quantization")
+                bit = 4
+
         path = fetch_from_hub(hf_model_name_or_path)
 
         if path is None:
@@ -433,6 +441,9 @@ class F5TTS(nn.Module):
             vocoder=vocos.decode,
             duration_predictor=duration_predictor,
         )
+
+        if bit is not None:
+            nn.quantize(f5tts, bits = bit, class_predicate= lambda p, m: isinstance(m, nn.Linear) and m.weight.shape[1] % 64 == 0)
 
         weights = mx.load(model_path.as_posix(), format="safetensors")
         f5tts.load_weights(list(weights.items()))
