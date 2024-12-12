@@ -407,7 +407,7 @@ class F5TTS(nn.Module):
     def from_pretrained(
         cls, hf_model_name_or_path: str, convert_weights=False, bit = None
     ) -> F5TTS:
-         if bit is None:
+        if bit is None:
             if "8bit" in hf_model_name_or_path:
                 print("Loading model with 8bit quantization")
                 bit = 8
