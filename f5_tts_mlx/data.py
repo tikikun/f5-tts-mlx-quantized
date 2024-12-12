@@ -1,12 +1,12 @@
 from functools import partial
 import hashlib
 from pathlib import Path
+import tarfile
 
 import mlx.core as mx
 import mlx.data as dx
 import numpy as np
-
-from einops.array_api import rearrange
+import os
 
 from mlx.data.datasets.common import (
     CACHE_DIR,
@@ -16,7 +16,10 @@ from mlx.data.datasets.common import (
     gzip_decompress,
 )
 
-from f5_tts_mlx.modules import log_mel_spectrogram
+from f5_tts_mlx.audio import log_mel_spectrogram
+from f5_tts_mlx.utils import list_str_to_idx
+
+SAMPLE_RATE = 24_000
 
 # utilities
 
@@ -27,66 +30,59 @@ def files_with_extensions(dir: Path, extensions: list = ["wav"]):
         files.extend(list(dir.rglob(f"*.{ext}")))
     files = sorted(files)
 
-    return [{"file": f.as_posix().encode("utf-8")} for f in files]
+    return [{"file": mx.array(f.as_posix().encode("utf-8"))} for f in files]
+
+
+def calculate_wav_duration(file_path):
+    # assumptions
+    bit_depth = 16
+    num_channels = 1
+
+    bytes_per_sample = bit_depth // 8
+    bytes_per_second = SAMPLE_RATE * num_channels * bytes_per_sample
+
+    file_size = os.path.getsize(file_path)
+    duration_seconds = file_size / bytes_per_second
+
+    return duration_seconds
 
 
 # transforms
 
-
-def _load_transcript_file(sample):
-    audio_file = Path(bytes(sample["file"]).decode("utf-8"))
-    transcript_file = audio_file.with_suffix(".normalized.txt")
-    sample["transcript_file"] = transcript_file.as_posix().encode("utf-8")
-    return sample
+vocab = {chr(i): i for i in range(256)}
 
 
 def _load_transcript(sample):
     audio_file = Path(bytes(sample["file"]).decode("utf-8"))
+    if not audio_file.suffix == ".wav":
+        return dict()
+
     transcript_file = audio_file.with_suffix(".normalized.txt")
     if not transcript_file.exists():
         return dict()
 
-    transcript = np.array(
-        list(transcript_file.read_text().strip().encode("utf-8")), dtype=np.int8
-    )
-    sample["transcript"] = transcript
+    text = transcript_file.read_text().strip()
+    sample["transcript"] = mx.array(list_str_to_idx(text, vocab))
     return sample
 
 
-def _load_cached_mel_spec(sample, max_duration=5):
+def _load_audio_file(sample, max_duration=10):
     audio_file = Path(bytes(sample["file"]).decode("utf-8"))
-    mel_file = audio_file.with_suffix(".mel.npy.npz")
-    mel_spec = mx.load(mel_file.as_posix())["arr_0"]
-    mel_len = mel_spec.shape[1]
 
-    if mel_len > int(max_duration * 93.75):
+    duration = calculate_wav_duration(audio_file)
+    if duration > max_duration:
         return dict()
 
-    sample["mel_spec"] = mel_spec
-    sample["mel_len"] = mel_len
-    del sample["file"]
-    return sample
-
-
-def _load_audio_file(sample):
-    audio_file = Path(bytes(sample["file"]).decode("utf-8"))
-    audio = np.array(list(audio_file.read_bytes()), dtype=np.int8)
+    audio = np.array(list(audio_file.read_bytes()), dtype=np.uint8)
     sample["audio"] = audio
     return sample
 
 
 def _to_mel_spec(sample):
-    audio = rearrange(mx.array(sample["audio"]), "t 1 -> t")
+    audio = mx.squeeze(mx.array(sample["audio"]), axis=-1)
     mel_spec = log_mel_spectrogram(audio)
     sample["mel_spec"] = mel_spec
     sample["mel_len"] = mel_spec.shape[1]
-    return sample
-
-
-def _with_max_duration(sample, sample_rate=24_000, max_duration=30):
-    audio_duration = sample["audio"].shape[0] / sample_rate
-    if audio_duration > max_duration:
-        return dict()
     return sample
 
 
@@ -188,21 +184,14 @@ def load_libritts_r(
     target = load_libritts_r_tarfile(
         root=root, split=split, quiet=quiet, validate_download=validate_download
     )
-    target = str(target)
 
-    dset = (
-        dx.files_from_tar(target)
-        .to_stream()
-        .sample_transform(lambda s: s if bytes(s["file"]).endswith(b".wav") else dict())
-        .sample_transform(_load_transcript_file)
-        .read_from_tar(target, "transcript_file", "transcript")
-        .read_from_tar(target, "file", "audio")
-        .load_audio("audio", from_memory=True)
-        .sample_transform(partial(_with_max_duration, max_duration=max_duration))
-        .sample_transform(_to_mel_spec)
-    )
+    path = Path(target.parent) / "LibriTTS_R" / split
 
-    return dset
+    tar = tarfile.open(target)
+    tar.extractall(path=target.parent)
+    tar.close()
+
+    return load_dir(path, max_duration=max_duration), path
 
 
 def load_dir(dir=None, max_duration=30):
@@ -216,7 +205,9 @@ def load_dir(dir=None, max_duration=30):
         .to_stream()
         .sample_transform(lambda s: s if bytes(s["file"]).endswith(b".wav") else dict())
         .sample_transform(_load_transcript)
-        .sample_transform(partial(_load_cached_mel_spec, max_duration=max_duration))
+        .sample_transform(partial(_load_audio_file, max_duration=max_duration))
+        .load_audio("audio", from_memory=True)
+        .sample_transform(_to_mel_spec)
     )
 
     return dset

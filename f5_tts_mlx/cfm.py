@@ -8,9 +8,7 @@ d - dimension
 """
 
 from __future__ import annotations
-from datetime import datetime
 from pathlib import Path
-from random import random
 from typing import Callable, Literal
 
 import mlx.core as mx
@@ -20,19 +18,109 @@ from einops.array_api import rearrange, repeat
 
 from vocos_mlx import Vocos
 
+from f5_tts_mlx.audio import MelSpec
 from f5_tts_mlx.duration import DurationPredictor, DurationTransformer
 from f5_tts_mlx.dit import DiT
-from f5_tts_mlx.modules import MelSpec
 from f5_tts_mlx.utils import (
     exists,
+    fetch_from_hub,
     default,
     lens_to_mask,
-    mask_from_frac_lengths,
     list_str_to_idx,
     list_str_to_tensor,
+    mask_from_frac_lengths,
     pad_sequence,
-    fetch_from_hub,
 )
+
+# ode solvers
+
+
+def odeint_euler(func, y0, t):
+    """
+    Solves ODE using the Euler method.
+
+    Parameters:
+    - func: Function representing the ODE, with signature func(t, y).
+    - y0: Initial state, an MLX array of any shape.
+    - t: Array of time steps, an MLX array.
+    """
+    ys = [y0]
+    y_current = y0
+
+    for i in range(len(t) - 1):
+        t_current = t[i]
+        dt = t[i + 1] - t_current
+
+        # compute the next value
+        k = func(t_current, y_current)
+        y_next = y_current + dt * k
+
+        ys.append(y_next)
+        y_current = y_next
+
+    return mx.stack(ys)
+
+
+def odeint_midpoint(func, y0, t):
+    """
+    Solves ODE using the midpoint method.
+
+    Parameters:
+    - func: Function representing the ODE, with signature func(t, y).
+    - y0: Initial state, an MLX array of any shape.
+    - t: Array of time steps, an MLX array.
+    """
+    ys = [y0]
+    y_current = y0
+
+    for i in range(len(t) - 1):
+        t_current = t[i]
+        dt = t[i + 1] - t_current
+
+        # midpoint approximation
+        k1 = func(t_current, y_current)
+        mid = y_current + 0.5 * dt * k1
+
+        # compute the next value
+        k2 = func(t_current + 0.5 * dt, mid)
+        y_next = y_current + dt * k2
+
+        ys.append(y_next)
+        y_current = y_next
+
+    return mx.stack(ys)
+
+
+def odeint_rk4(func, y0, t):
+    """
+    Solves ODE using the Runge-Kutta 4th-order (RK4) method.
+
+    Parameters:
+    - func: Function representing the ODE, with signature func(t, y).
+    - y0: Initial state, an MLX array of any shape.
+    - t: Array of time steps, an MLX array.
+    """
+    ys = [y0]
+    y_current = y0
+
+    for i in range(len(t) - 1):
+        t_current = t[i]
+        dt = t[i + 1] - t_current
+
+        # rk4 steps
+        k1 = func(t_current, y_current)
+        k2 = func(t_current + 0.5 * dt, y_current + 0.5 * dt * k1)
+        k3 = func(t_current + 0.5 * dt, y_current + 0.5 * dt * k2)
+        k4 = func(t_current + dt, y_current + dt * k3)
+
+        # compute the next value
+        y_next = y_current + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+
+        ys.append(y_next)
+        y_current = y_next
+
+    return mx.stack(ys)
+
 
 # conditional flow matching
 
@@ -41,7 +129,6 @@ class F5TTS(nn.Module):
     def __init__(
         self,
         transformer: nn.Module,
-        sigma=0.0,
         audio_drop_prob=0.3,
         cond_drop_prob=0.2,
         num_channels=None,
@@ -70,9 +157,6 @@ class F5TTS(nn.Module):
         dim = transformer.dim
         self.dim = dim
 
-        # conditional flow related
-        self.sigma = sigma
-
         # vocab map for tokenization
         self._vocab_char_map = vocab_char_map
 
@@ -88,15 +172,15 @@ class F5TTS(nn.Module):
         text: mx.array["b nt"] | list[str],
         *,
         lens: mx.array["b"] | None = None,
-    ) -> tuple[mx.array, mx.array, mx.array]:
+    ) -> mx.array:
         # handle raw wave
         if inp.ndim == 2:
             inp = self._mel_spec(inp)
             inp = rearrange(inp, "b d n -> b n d")
             assert inp.shape[-1] == self.num_channels
 
-        batch, seq_len, dtype, σ1 = *inp.shape[:2], inp.dtype, self.sigma
-
+        batch, seq_len, dtype = *inp.shape[:2], inp.dtype
+        
         # handle text as string
         if isinstance(text, list):
             if exists(self._vocab_char_map):
@@ -140,15 +224,13 @@ class F5TTS(nn.Module):
         )
 
         # transformer and cfg training with a drop rate
-        drop_audio_cond = random() < self.audio_drop_prob  # p_drop in voicebox paper
-        if random() < self.cond_drop_prob:
-            drop_audio_cond = True
-            drop_text = True
-        else:
-            drop_text = False
 
-        # if want rigourously mask out padding, record in collate_fn in dataset.py, and pass in here
-        # adding mask will use more memory, thus also need to adjust batchsampler with scaled down threshold for long sequences
+        rand_audio_drop = mx.random.uniform(0, 1, (1,))
+        rand_cond_drop = mx.random.uniform(0, 1, (1,))
+        drop_audio_cond = rand_audio_drop < self.audio_drop_prob
+        drop_text = rand_cond_drop < self.cond_drop_prob
+        drop_audio_cond = drop_audio_cond | drop_text
+        
         pred = self.transformer(
             x=φ,
             cond=cond,
@@ -159,6 +241,7 @@ class F5TTS(nn.Module):
         )
 
         # flow matching loss
+        
         loss = nn.losses.mse_loss(pred, flow, reduction="none")
 
         rand_span_mask = repeat(rand_span_mask, "b n -> b n d", d=self.num_channels)
@@ -167,57 +250,16 @@ class F5TTS(nn.Module):
 
         return loss.mean()
 
-    def odeint_midpoint(self, func, y0, t):
-        """
-        Solves ODE using the midpoint method.
-
-        Parameters:
-        - y0: Initial state, an MLX array of any shape.
-        - t: Array of time steps, an MLX array.
-        """
-        ys = [y0]
-        y_current = y0
-
-        for i in range(len(t) - 1):
-            t_current = t[i]
-            dt = t[i + 1] - t_current
-
-            # midpoint approximation
-            k1 = func(t_current, y_current)
-            mid = y_current + 0.5 * dt * k1
-
-            # compute the next value
-            k2 = func(t_current + 0.5 * dt, mid)
-            y_next = y_current + dt * k2
-
-            ys.append(y_next)
-            y_current = y_next
-
-        return mx.stack(ys)
-
-    def odeint_euler(self, func, y0, t):
-        """
-        Solves ODE using the Euler method.
-
-        Parameters:
-        - y0: Initial state, an MLX array of any shape.
-        - t: Array of time steps, an MLX array.
-        """
-        ys = [y0]
-        y_current = y0
-
-        for i in range(len(t) - 1):
-            t_current = t[i]
-            dt = t[i + 1] - t_current
-
-            # compute the next value
-            k = func(t_current, y_current)
-            y_next = y_current + dt * k
-
-            ys.append(y_next)
-            y_current = y_next
-
-        return mx.stack(ys)
+    def predict_duration(
+        self,
+        cond: mx.array["b n d"],
+        text: mx.array["b nt"],
+        speed: float = 1.0,
+    ) -> int:
+        duration_in_sec = self._duration_predictor(cond, text)
+        frame_rate = self._mel_spec.sample_rate // self._mel_spec.hop_length
+        duration = (duration_in_sec * frame_rate / speed).astype(mx.int32)
+        return duration
 
     def sample(
         self,
@@ -226,18 +268,14 @@ class F5TTS(nn.Module):
         duration: int | mx.array["b"] | None = None,
         *,
         lens: mx.array["b"] | None = None,
-        steps=32,
-        method: Literal["euler", "midpoint"] = "euler",
+        steps=8,
+        method: Literal["euler", "midpoint", "rk4"] = "rk4",
         cfg_strength=2.0,
         speed=1.0,
         sway_sampling_coef=-1.0,
         seed: int | None = None,
         max_duration=4096,
-        no_ref_audio=False,
-        edit_mask=None,
     ) -> tuple[mx.array, mx.array]:
-        start_date = datetime.now()
-
         self.eval()
 
         # raw wave
@@ -245,7 +283,6 @@ class F5TTS(nn.Module):
         if cond.ndim == 2:
             cond = rearrange(cond, "1 n -> n")
             cond = self._mel_spec(cond)
-            # cond = rearrange(cond, "b d n -> b n d")
             assert cond.shape[-1] == self.num_channels
 
         batch, cond_seq_len, dtype = *cond.shape[:2], cond.dtype
@@ -268,20 +305,13 @@ class F5TTS(nn.Module):
         # duration
 
         if duration is None and self._duration_predictor is not None:
-            duration_in_sec = self._duration_predictor(cond, text)
-            frame_rate = self._mel_spec.sample_rate // self._mel_spec.hop_length
-            duration = (duration_in_sec * frame_rate / speed).astype(mx.int32).item()
-            print(
-                f"Got duration of {duration} frames ({duration_in_sec.item()} secs) for generated speech."
-            )
+            duration = self.predict_duration(cond, text, speed)
         elif duration is None:
             raise ValueError(
                 "Duration must be provided or a duration predictor must be set."
             )
 
         cond_mask = lens_to_mask(lens)
-        if edit_mask is not None:
-            cond_mask = cond_mask & edit_mask
 
         if isinstance(duration, int):
             duration = mx.full((batch,), duration, dtype=dtype)
@@ -307,10 +337,6 @@ class F5TTS(nn.Module):
         else:
             mask = None
 
-        # test for no ref audio
-        if no_ref_audio:
-            cond = mx.zeros_like(cond)
-
         # neural ode
 
         def fn(t, x):
@@ -324,8 +350,8 @@ class F5TTS(nn.Module):
                 drop_audio_cond=False,
                 drop_text=False,
             )
+
             if cfg_strength < 1e-5:
-                mx.eval(pred)
                 return pred
 
             null_pred = self.transformer(
@@ -338,17 +364,17 @@ class F5TTS(nn.Module):
                 drop_text=True,
             )
             output = pred + (pred - null_pred) * cfg_strength
-            mx.eval(output)
             return output
 
         # noise input
-        
+
         y0 = []
         for dur in duration:
             if exists(seed):
                 mx.random.seed(seed)
-            y0.append(mx.random.normal((dur, self.num_channels)))
+            y0.append(mx.random.normal((self.num_channels, dur)))
         y0 = pad_sequence(y0, padding_value=0)
+        y0 = rearrange(y0, "b d n -> b n d")
 
         t_start = 0
 
@@ -357,11 +383,16 @@ class F5TTS(nn.Module):
             t = t + sway_sampling_coef * (mx.cos(mx.pi / 2 * t) - 1 + t)
 
         if method == "midpoint":
-            trajectory = self.odeint_midpoint(fn, y0, t)
+            ode_step_fn = odeint_midpoint
         elif method == "euler":
-            trajectory = self.odeint_euler(fn, y0, t)
+            ode_step_fn = odeint_euler
+        elif method == "rk4":
+            ode_step_fn = odeint_rk4
         else:
             raise ValueError(f"Unknown method: {method}")
+
+        fn = mx.compile(fn)
+        trajectory = ode_step_fn(fn, y0, t)
 
         sampled = trajectory[-1]
         out = sampled
@@ -370,22 +401,19 @@ class F5TTS(nn.Module):
         if exists(self._vocoder):
             out = self._vocoder(out)
 
-        mx.eval(out)
-
-        print(f"Generated speech in {datetime.now() - start_date}")
-
         return out, trajectory
 
     @classmethod
-    def from_pretrained(cls, hf_model_name_or_path: str, bit = None) -> F5TTS:
-        if bit is None:
+    def from_pretrained(
+        cls, hf_model_name_or_path: str, convert_weights=False, bit = None
+    ) -> F5TTS:
+         if bit is None:
             if "8bit" in hf_model_name_or_path:
                 print("Loading model with 8bit quantization")
                 bit = 8
             elif "4bit" in hf_model_name_or_path:
                 print("Loading model with 4bit quantization")
                 bit = 4
-
         path = fetch_from_hub(hf_model_name_or_path)
 
         if path is None:
@@ -446,6 +474,40 @@ class F5TTS(nn.Module):
             nn.quantize(f5tts, bits = bit, class_predicate= lambda p, m: isinstance(m, nn.Linear) and m.weight.shape[1] % 64 == 0)
 
         weights = mx.load(model_path.as_posix(), format="safetensors")
+
+        if convert_weights:
+            new_weights = {}
+            for k, v in weights.items():
+                k = k.replace("ema_model.", "")
+
+                # rename layers
+                if len(k) < 1 or "mel_spec." in k or k in ("initted", "step"):
+                    continue
+                elif ".to_out" in k:
+                    k = k.replace(".to_out", ".to_out.layers")
+                elif ".text_blocks" in k:
+                    k = k.replace(".text_blocks", ".text_blocks.layers")
+                elif ".ff.ff.0.0" in k:
+                    k = k.replace(".ff.ff.0.0", ".ff.ff.layers.0.layers.0")
+                elif ".ff.ff.2" in k:
+                    k = k.replace(".ff.ff.2", ".ff.ff.layers.2")
+                elif ".time_mlp" in k:
+                    k = k.replace(".time_mlp", ".time_mlp.layers")
+                elif ".conv1d" in k:
+                    k = k.replace(".conv1d", ".conv1d.layers")
+
+                # reshape weights
+                if ".dwconv.weight" in k:
+                    v = v.swapaxes(1, 2)
+                elif ".conv1d.layers.0.weight" in k:
+                    v = v.swapaxes(1, 2)
+                elif ".conv1d.layers.2.weight" in k:
+                    v = v.swapaxes(1, 2)
+
+                new_weights[k] = v
+
+            weights = new_weights
+
         f5tts.load_weights(list(weights.items()))
         mx.eval(f5tts.parameters())
 
