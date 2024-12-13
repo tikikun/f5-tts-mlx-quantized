@@ -1,6 +1,6 @@
 ![F5 Quantized so smol](f5quantized.png)
 
-HF: [Mode weight](https://huggingface.co/alandao/f5-tts-mlx-4bit)
+HF: [Model weight](https://huggingface.co/alandao/f5-tts-mlx-4bit)
 
 # F5 TTS — MLX
 
