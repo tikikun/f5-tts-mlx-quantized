@@ -13,9 +13,11 @@ You can listen to a [sample here](https://s3.amazonaws.com/lucasnewman.datasets/
 F5 is an evolution of [E2 TTS](https://arxiv.org/abs/2406.18009v2) and improves performance with ConvNeXT v2 blocks for the learned text alignment. This repository is based on the original Pytorch implementation available [here](https://github.com/SWivid/F5-TTS).
 
 # Demo:
-## 4bit
+## 4bit (223MB)
 https://github.com/user-attachments/assets/406b4624-8f7c-48a4-a35d-2108fb081744
 
+## Original (1.35GB)
+https://github.com/user-attachments/assets/c8b6f7c0-65ab-4950-ac96-b10608954174
 
 ## Installation
 
