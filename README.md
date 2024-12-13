@@ -18,7 +18,7 @@ F5 is an evolution of [E2 TTS](https://arxiv.org/abs/2406.18009v2) and improves 
 ## Installation
 
 ```bash
-pip install f5-tts-mlx
+pip install f5-tts-mlx-quantized
 ```
 
 ## Basic Usage
