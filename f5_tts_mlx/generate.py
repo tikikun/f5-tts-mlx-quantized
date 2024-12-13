@@ -117,9 +117,9 @@ def generate(
     player = AudioPlayer(sample_rate=SAMPLE_RATE) if output_path is None else None
 
     # the default model already has converted weights
-    convert_weights = model_name != "lucasnewman/f5-tts-mlx"
+    # convert_weights = model_name != "lucasnewman/f5-tts-mlx"
 
-    f5tts = F5TTS.from_pretrained(model_name, convert_weights=convert_weights)
+    f5tts = F5TTS.from_pretrained(model_name)
 
     if ref_audio_path is None:
         data = pkgutil.get_data("f5_tts_mlx", "tests/test_en_1_ref_short.wav")
