@@ -8,9 +8,7 @@ Implementation of [F5-TTS](https://arxiv.org/abs/2410.06885), with the [MLX](htt
 
 F5 TTS is a non-autoregressive, zero-shot text-to-speech system using a flow-matching mel spectrogram generator with a diffusion transformer (DiT).
 
-You can listen to a [sample here](https://s3.amazonaws.com/lucasnewman.datasets/f5tts/sample.wav) that was generated in ~11 seconds on an M3 Max MacBook Pro.
-
-F5 is an evolution of [E2 TTS](https://arxiv.org/abs/2406.18009v2) and improves performance with ConvNeXT v2 blocks for the learned text alignment. This repository is based on the original Pytorch implementation available [here](https://github.com/SWivid/F5-TTS).
+This repo attempted to reduce the VRAM usage of the original model so that it can be easily deployed on any kind of Apple Device with ease (with MLX). The result as can be seen, is still very usable.
 
 # Demo:
 ## 4bit (223MB)
