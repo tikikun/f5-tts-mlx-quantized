@@ -1,5 +1,8 @@
 ![F5 Quantized so smol](f5quantized.png)
 
+# Demo - 4bit :
+https://github.com/user-attachments/assets/406b4624-8f7c-48a4-a35d-2108fb081744
+
 # F5 TTS — MLX
 
 _This repo is a fork of original f5-tts-mlx implementation but a quantized flow-matching model that is only **223MB** in size. The repo is meant to be used as a component of my blog post on low VRAM voice generator_
