@@ -1,6 +1,6 @@
 ![F5 TTS diagram](f5tts.jpg)
 
-# F5 TTS — MLX
+# F5 TTS — MLX - QUANTIZED - High quality voice generator under 400mb VRAM
 
 Implementation of [F5-TTS](https://arxiv.org/abs/2410.06885), with the [MLX](https://github.com/ml-explore/mlx) framework.
 
