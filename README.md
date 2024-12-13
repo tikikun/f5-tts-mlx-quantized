@@ -31,6 +31,12 @@ pip install f5-tts-mlx-quantized
 python -m f5_tts_mlx.generate --text "The quick brown fox jumped over the lazy dog."
 ```
 
+or if you want an audio file ouput you can add `--output`
+
+```bash
+python -m f5_tts_mlx.generate --text "The quick brown fox jumped over the lazy dog." --output "./output.wav"
+```
+
 You can also use a pipe to generate speech from the output of another process, for instance from a language model:
 
 ```bash
