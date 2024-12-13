@@ -1,8 +1,5 @@
 ![F5 Quantized so smol](f5quantized.png)
 
-# Demo - 4bit :
-https://github.com/user-attachments/assets/406b4624-8f7c-48a4-a35d-2108fb081744
-
 # F5 TTS — MLX
 
 _This repo is a fork of original f5-tts-mlx implementation but a quantized flow-matching model that is only **223MB** in size. The repo is meant to be used as a component of my blog post on low VRAM voice generator_
@@ -14,6 +11,11 @@ F5 TTS is a non-autoregressive, zero-shot text-to-speech system using a flow-mat
 You can listen to a [sample here](https://s3.amazonaws.com/lucasnewman.datasets/f5tts/sample.wav) that was generated in ~11 seconds on an M3 Max MacBook Pro.
 
 F5 is an evolution of [E2 TTS](https://arxiv.org/abs/2406.18009v2) and improves performance with ConvNeXT v2 blocks for the learned text alignment. This repository is based on the original Pytorch implementation available [here](https://github.com/SWivid/F5-TTS).
+
+# Demo:
+## 4bit
+https://github.com/user-attachments/assets/406b4624-8f7c-48a4-a35d-2108fb081744
+
 
 ## Installation
 
