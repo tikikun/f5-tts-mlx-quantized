@@ -5,9 +5,9 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "f5-tts-mlx"
+name = "f5-tts-mlx-quantized"
 version = "0.2.2"
-authors = [{name = "Lucas Newman", email = "lucasnewman@me.com"}]
+authors = [{name = "Alan Dao", email = "contact@alandao.net"}]
 license = {text = "MIT"}
 description = "F5-TTS - MLX"
 readme = "README.md"
@@ -43,7 +43,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/lucasnewman/f5-tts-mlx"
+Homepage = "https://github.com/tikikun/f5-tts-mlx-quantized"
 
 [tool.setuptools]
 packages = ["f5_tts_mlx"]
