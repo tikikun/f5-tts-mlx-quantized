@@ -1,6 +1,8 @@
-![F5 TTS diagram](f5tts.jpg)
+![F5 Quantized so smol](f5quantized.png)
 
-# F5 TTS — MLX - QUANTIZED - High quality voice generator under 400mb VRAM
+# F5 TTS — MLX
+
+_This repo is a fork of original f5-tts-mlx implementation but a quantized flow-matching model that is only **223MB** in size. The repo is meant to be used as a component of my blog post on low VRAM voice generator_
 
 Implementation of [F5-TTS](https://arxiv.org/abs/2410.06885), with the [MLX](https://github.com/ml-explore/mlx) framework.
 
@@ -62,6 +64,8 @@ audio = generate(text = "Hello world.", ...)
 Pretrained model weights are also available [on Hugging Face](https://huggingface.co/lucasnewman/f5-tts-mlx).
 
 ## Appreciation
+
+[Lucas Newman](https://github.com/lucasnewman/f5-tts-mlx) for original implementation of F5 TTS on MLX
 
 [Yushen Chen](https://github.com/SWivid) for the original Pytorch implementation of F5 TTS and pretrained model.
 
